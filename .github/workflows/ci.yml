@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  build-ios-simulator:
+    # Simulator binary handed to QA for manual smoke tests. Slow, so main only.
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-14
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: ./scripts/build-ios-simulator.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mercado-simulator
+          path: build-artifacts/Mercado-simulator.zip
