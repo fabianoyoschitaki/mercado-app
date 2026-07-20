@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Product } from '../services/types';
 import { getProduct } from '../services/products';
@@ -21,6 +21,12 @@ export default function ProductDetailScreen({ route }: any) {
     getProduct(productId).then(setProduct);
     getFavouriteIds().then((ids) => setFav(ids.includes(productId)));
   }, [productId]);
+
+  // price math shouldn't re-run on unrelated re-renders (fav toggles, add feedback)
+  const subtotal = useMemo(
+    () => (product ? formatPrice(product.price * qty) : ''),
+    [product]
+  );
 
   if (!product) {
     return (
@@ -69,7 +75,7 @@ export default function ProductDetailScreen({ route }: any) {
         <TouchableOpacity testID="qty-plus" onPress={() => setQty(qty + 1)} style={styles.qtyBtn}>
           <Text style={styles.qtyBtnLabel}>+</Text>
         </TouchableOpacity>
-        <Text style={styles.subtotal}>Subtotal: {formatPrice(product.price * qty)}</Text>
+        <Text style={styles.subtotal}>Subtotal: {subtotal}</Text>
       </View>
 
       <AppButton
