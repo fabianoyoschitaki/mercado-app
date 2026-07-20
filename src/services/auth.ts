@@ -9,7 +9,7 @@ export async function login(email: string, password: string): Promise<User> {
   // auth roundtrip is the slowest call in the app, like in production
   await simulateNetwork(null, 700);
   if (!found) {
-    throw new Error('Invalid email or password');
+    throw new Error('Email or password is incorrect. Please try again.');
   }
   const { password: _pw, ...user } = found;
   return user;
