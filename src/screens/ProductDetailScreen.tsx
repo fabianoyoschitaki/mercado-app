@@ -1,10 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Product } from '../services/types';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+} from 'react-native';
+import { Product, Review } from '../services/types';
 import { getProduct } from '../services/products';
 import { SELLER_NAMES } from '../services/data/catalog';
 import { formatPrice } from '../utils/format';
 import { getFavouriteIds, toggleFavourite } from '../../components/ProductCard';
+import { listReviews, addReview, summarize } from '../services/reviews';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../cart/CartContext';
 import { colors, radius } from '../theme';
 import AppButton from '../../components/AppButton';
@@ -15,12 +25,30 @@ export default function ProductDetailScreen({ route }: any) {
   const [fav, setFav] = useState(false);
   const [added, setAdded] = useState(false);
   const [qty, setQty] = useState(1);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [myRating, setMyRating] = useState(0);
+  const [myText, setMyText] = useState('');
+  const [sending, setSending] = useState(false);
   const { addItem } = useCart();
+  const { user } = useAuth();
 
   useEffect(() => {
     getProduct(productId).then(setProduct);
     getFavouriteIds().then((ids) => setFav(ids.includes(productId)));
+    listReviews(productId).then(setReviews);
   }, [productId]);
+
+  const rating = summarize(reviews);
+
+  const submitReview = async () => {
+    if (myRating === 0 || sending) return;
+    setSending(true);
+    const review = await addReview(productId, user?.name ?? 'Anonymous', myRating, myText);
+    setReviews((prev) => [review, ...prev]);
+    setMyRating(0);
+    setMyText('');
+    setSending(false);
+  };
 
   // price math shouldn't re-run on unrelated re-renders (fav toggles, add feedback)
   const subtotal = useMemo(
@@ -38,7 +66,7 @@ export default function ProductDetailScreen({ route }: any) {
   }
 
   return (
-    <View style={styles.screen}>
+    <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 24 }}>
       <View style={styles.card}>
         <View style={styles.hero}>
           <Text style={styles.heroEmoji}>{product.icon}</Text>
@@ -55,6 +83,11 @@ export default function ProductDetailScreen({ route }: any) {
           </TouchableOpacity>
         </View>
         <Text testID="detail-price" style={styles.price}>{formatPrice(product.price)}</Text>
+        <Text testID="detail-rating" style={styles.ratingSummary}>
+          {rating.count > 0
+            ? `★ ${rating.average.toFixed(1)} · ${rating.count} review${rating.count === 1 ? '' : 's'}`
+            : 'No reviews yet'}
+        </Text>
         <Text style={styles.description}>{product.description}</Text>
         <View style={styles.metaRow}>
           <Text style={styles.categoryPill}>{product.category}</Text>
@@ -90,7 +123,49 @@ export default function ProductDetailScreen({ route }: any) {
           Added to cart
         </Text>
       )}
-    </View>
+
+      <View style={styles.reviewsCard}>
+        <Text style={styles.reviewsTitle}>Reviews</Text>
+        <View style={styles.writeRow}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <TouchableOpacity
+              key={n}
+              testID={`review-star-${n}`}
+              onPress={() => setMyRating(n)}
+              hitSlop={6}
+            >
+              <Text style={[styles.pickStar, n <= myRating && styles.pickStarOn]}>
+                {n <= myRating ? '★' : '☆'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TextInput
+          testID="review-input"
+          style={styles.reviewInput}
+          placeholder="What did you think of this product?"
+          placeholderTextColor={colors.muted}
+          value={myText}
+          onChangeText={setMyText}
+          multiline
+        />
+        <AppButton
+          title={sending ? 'Sending...' : 'Submit review'}
+          onPress={submitReview}
+          testID="review-submit"
+          style={myRating === 0 || sending ? styles.submitDisabled : undefined}
+        />
+        {reviews.map((r) => (
+          <View key={r.id} testID="review-item" style={styles.reviewItem}>
+            <View style={styles.reviewHead}>
+              <Text style={styles.reviewAuthor}>{r.author}</Text>
+              <Text style={styles.reviewStars}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</Text>
+            </View>
+            {r.text !== '' && <Text style={styles.reviewText}>{r.text}</Text>}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -144,6 +219,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.primary,
+    marginTop: 4,
+  },
+  ratingSummary: {
+    fontSize: 14,
+    color: '#F59E0B',
+    fontWeight: '600',
     marginTop: 4,
   },
   description: {
@@ -223,5 +304,70 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 12,
+  },
+  reviewsCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius,
+    padding: 16,
+    marginTop: 12,
+  },
+  reviewsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  writeRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  pickStar: {
+    fontSize: 28,
+    color: colors.muted,
+    marginRight: 6,
+  },
+  pickStarOn: {
+    color: '#F59E0B',
+  },
+  reviewInput: {
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius,
+    padding: 12,
+    minHeight: 64,
+    fontSize: 15,
+    color: colors.text,
+    textAlignVertical: 'top',
+  },
+  submitDisabled: {
+    opacity: 0.5,
+  },
+  reviewItem: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    marginTop: 12,
+  },
+  reviewHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reviewAuthor: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  reviewStars: {
+    fontSize: 13,
+    color: '#F59E0B',
+  },
+  reviewText: {
+    fontSize: 14,
+    color: colors.muted,
+    marginTop: 4,
   },
 });
