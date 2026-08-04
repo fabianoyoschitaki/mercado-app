@@ -25,6 +25,15 @@ export type Order = {
   createdAt: number;
 };
 
+export type Review = {
+  id: string;
+  productId: string;
+  author: string;
+  rating: number; // 1..5
+  text: string;
+  createdAt: number;
+};
+
 export type User = {
   email: string;
   name: string;
