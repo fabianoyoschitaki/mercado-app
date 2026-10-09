@@ -59,3 +59,4 @@ Simulator binary on main via `scripts/build-ios-simulator.sh` (output:
 ## Checks
 
 Every push to main and every pull request is built and checked by Maestro Clear.
+Clear reads contexts, text fields and visible elements too.
