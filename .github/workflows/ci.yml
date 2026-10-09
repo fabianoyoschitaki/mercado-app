@@ -34,3 +34,45 @@ jobs:
         with:
           name: mercado-simulator
           path: build-artifacts/Mercado-simulator.zip
+
+  send-to-maestro-clear:
+    # Maestro Clear checks every build of main and of each pull request.
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      # your checkout: on a pull request, the PR's head (the commit sent below), not GitHub's merge commit
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - run: npx pod-install ios
+      - name: Build the Release simulator app
+        run: |
+          xcodebuild -workspace ios/Mercado.xcworkspace -scheme Mercado \
+            -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+
+      - name: Send to Maestro Clear
+        env:
+          MAESTRO_API_KEY: ${{ secrets.MAESTRO_API_KEY }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # the Release simulator .app (xcodebuild -configuration Release -sdk iphonesimulator
+          # -derivedDataPath build): a Debug React Native build has no JS bundle in it
+          # a .app is a directory with symlinks inside; zip -r breaks them
+          ditto -c -k --keepParent \
+            build/Build/Products/Release-iphonesimulator/Mercado.app \
+            app.zip
+
+          # -fsS so a 401 fails the step. Without it the workflow goes green and
+          # no build ever arrives, which is the one failure nothing else catches.
+          curl -fsS -X POST https://clear.maestro.dev/v1/builds \
+            -H "Authorization: Bearer $MAESTRO_API_KEY" \
+            -F commit=$COMMIT \
+            -F app=@app.zip
