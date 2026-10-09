@@ -55,3 +55,7 @@ Simulator binary on main via `scripts/build-ios-simulator.sh` (output:
   orders, and session persist locally via AsyncStorage.
 - The mock data path simulates backend latency (see `simulateNetwork` in
   `src/services/client.ts`), so screens show real loading states.
+
+## Checks
+
+Every push to main and every pull request is built and checked by Maestro Clear.
